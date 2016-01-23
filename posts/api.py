@@ -77,4 +77,78 @@ def post_delete(id):
     message = "Post id {} deleted.".format(id)
     data = json.dumps({"message":message})
     return Response(data, 200, mimetype="application/json")
+
+@app.route("/api/posts", methods=["POST"])
+@decorators.accept("application/json")
+@decorators.require("application/json")
+def posts_post():
+    """ Add a new post """
+    data = request.json
     
+    # Try to validate data
+    try:
+        validate(data, post_schema)
+    except ValidationError as error:
+        data = {"message": error.message}
+        return Response(json.dumps(data), 422, mimetype="application/json")
+
+    # Add the post to the database
+    post = models.Post(title=data["title"], body=data["body"])
+    session.add(post)
+    session.commit()
+
+    # Return a 201 Created, containing the post as JSON and with the
+    # Location header set to the location of the post
+    data = json.dumps(post.as_dictionary())
+    headers = {"Location": url_for("post_get", id=post.id)}
+    return Response(data, 201, headers=headers,
+                    mimetype="application/json")
+
+@app.route("/api/posts/<int:id>", methods=["PUT"])
+@decorators.accept("application/json")
+@decorators.require("application/json")
+def post_put(id):
+    """ Construct the post """
+    data = request.json
+    
+    """ Try to validate data """
+    try:
+        validate(data, post_schema)
+    except ValidationError as error:
+        data = {"message": error.message}
+        return Response(json.dumps(data), 422, mimetype="application/json")
+    
+    post = models.Post(id=id, title=data["title"], body=data["body"])
+    
+    """ Single post endpoint """
+    # Get the post from the database
+    postInDB = session.query(models.Post).get(id)
+
+    # Check whether the post exists
+    # If not return a 404 with a helpful message
+    if not postInDB:
+        message = "Could not find post with id {}".format(id)
+        data = json.dumps({"message": message})
+        return Response(data, 404, mimetype="application/json")
+
+    # Update the post
+    postInDB.title = post.title
+    postInDB.body = post.body
+    session.commit()
+    
+    # Return a 202 Accepted, containing the post as JSON and with the
+    # Location header set to the location of the post
+    data = json.dumps(post.as_dictionary())
+    headers = {"Location": url_for("post_get", id=post.id)}
+    return Response(data, 202, headers=headers,
+                    mimetype="application/json")
+    
+
+
+post_schema = {
+    "properties": {
+        "title" : {"type" : "string"},
+        "body": {"type": "string"}
+    },
+    "required": ["title", "body"]
+}
